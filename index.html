@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14131f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Screen Time">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Screen Time Log</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@500;700&display=swap">
+<style>
+/* Layout: one column of two big kid cards, each with a clock, a daily-limit meter, one big button, and a ready-to-send message. */
+:root {
+  --bg: #f3f2f8;
+  --surface: #ffffff;
+  --fg: #1c1b2e;
+  --muted: #62607a;
+  --line: #dedcea;
+  --field: #f7f6fb;
+  --javeria: #b3267a;
+  --bilal: #0b6e99;
+  --stop: #c2410c;
+  --on-accent: #ffffff;
+  --display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14131f; --surface: #1f1d2e; --fg: #f0eff8; --muted: #a8a6c0; --line: #35324b; --field: #181726;
+    --javeria: #f06bb3; --bilal: #52b9ea; --stop: #fb923c; --on-accent: #14131f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14131f; --surface: #1f1d2e; --fg: #f0eff8; --muted: #a8a6c0; --line: #35324b; --field: #181726;
+  --javeria: #f06bb3; --bilal: #52b9ea; --stop: #fb923c; --on-accent: #14131f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.4;
+  padding-block: 20px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+main { max-width: 460px; margin: 0 auto; display: grid; gap: 16px; }
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-weight: 600; font-size: 1.6rem; margin: 0; text-wrap: balance; }
+.today { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+.card { background: var(--surface); border: 2px solid var(--line); border-radius: 18px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.card.javeria { --c: var(--javeria); }
+.card.bilal { --c: var(--bilal); }
+.card.running { border-color: var(--c); }
+.card.over { border-color: var(--stop); }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.5rem; margin: 0; color: var(--c); }
+.pill { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; background: var(--field); color: var(--muted); border: 1px solid var(--line); }
+.running .pill { background: var(--c); color: var(--on-accent); border-color: var(--c); }
+.over .pill { background: var(--stop); color: var(--on-accent); border-color: var(--stop); }
+.clock { font-family: var(--display); font-weight: 500; font-size: clamp(2.6rem, 14vw, 3.6rem); text-align: center; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; line-height: 1.1; }
+.idle .clock { color: var(--muted); }
+.meter { display: grid; gap: 6px; }
+.meter-row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-weight: 700; font-size: 0.92rem; color: var(--muted); }
+.meter-row .left { color: var(--fg); }
+.over .meter-row .left { color: var(--stop); }
+.bar { height: 10px; border-radius: 999px; background: var(--field); border: 1px solid var(--line); overflow: hidden; }
+.fill { height: 100%; width: 0; background: var(--c); border-radius: 999px; }
+.over .fill { background: var(--stop); }
+.alert { display: none; text-align: center; font-weight: 700; padding: 10px 12px; border-radius: 12px; background: var(--stop); color: var(--on-accent); }
+.due .alert { display: block; }
+.due { border-color: var(--stop); }
+.due .clock { color: var(--stop); }
+button, .wa { font: inherit; font-weight: 700; cursor: pointer; border: 0; border-radius: 14px; min-height: 52px; padding: 0 18px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.main { width: 100%; min-height: 68px; font-family: var(--display); font-size: 1.5rem; background: var(--c); color: var(--on-accent); }
+.running .main { background: var(--stop); color: var(--on-accent); }
+.msg { display: grid; gap: 8px; }
+.msg label { font-size: 0.85rem; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+textarea { width: 100%; font: inherit; font-weight: 700; line-height: 1.5; resize: none; color: var(--fg); background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.copy { background: var(--fg); color: var(--bg); }
+.wa { background: var(--field); color: var(--fg); border: 2px solid var(--line); }
+button:focus-visible, .wa:focus-visible, textarea:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid var(--c, var(--fg)); outline-offset: 2px; }
+details { color: var(--muted); }
+summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.settings { display: grid; gap: 14px; padding-top: 8px; }
+.setting { display: grid; gap: 6px; }
+.setting input { font: inherit; font-weight: 700; min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--field); color: var(--fg); padding: 0 14px; width: 100%; }
+.setting small { color: var(--muted); }
+@media (max-width: 360px) { .actions { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: no-preference) { .main { transition: transform 0.08s; } .main:active { transform: scale(0.98); } .fill { transition: width 0.4s; } }
+</style>
+<style>body{margin:0}</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1>Screen Time Log</h1>
+    <div class="today" id="today"></div>
+  </div>
+  <div id="cards" style="display:grid;gap:16px"></div>
+  <details>
+    <summary>Settings</summary>
+    <div class="settings">
+      <div class="setting">
+        <label for="session">Time allowed in one go, in minutes</label>
+        <input id="session" inputmode="numeric" placeholder="60" autocomplete="off">
+        <small>When this is reached, the card turns orange and asks them to give the phone back.</small>
+      </div>
+      <div class="setting">
+        <label for="limit">Daily limit for each child, in minutes</label>
+        <input id="limit" inputmode="numeric" placeholder="180" autocomplete="off">
+        <small>180 minutes is 3 hours. The count starts again at midnight.</small>
+      </div>
+      <div class="setting">
+        <label for="num">WhatsApp number with country code, digits only</label>
+        <input id="num" inputmode="numeric" placeholder="923001234567" autocomplete="off">
+        <small>Leave empty and WhatsApp will ask who to send it to.</small>
+      </div>
+    </div>
+  </details>
+</main>
+
+<script>
+(function () {
+  var KIDS = [{ id: "javeria", name: "Javeria" }, { id: "bilal", name: "Bilal" }];
+  var KEY = "screentime-log-v1";
+  var NUMKEY = "screentime-log-number";
+  var LIMKEY = "screentime-log-limit";
+  var state = {};
+  var number = "";
+  var limitMin = 180;
+  var sessionMin = 60;
+  var SESKEY = "screentime-log-session";
+
+  try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { state = {}; }
+  try { number = localStorage.getItem(NUMKEY) || ""; } catch (e) { number = ""; }
+  try { var lm = parseInt(localStorage.getItem(LIMKEY), 10); if (lm > 0) limitMin = lm; } catch (e) {}
+  try { var sm = parseInt(localStorage.getItem(SESKEY), 10); if (sm > 0) sessionMin = sm; } catch (e) {}
+  KIDS.forEach(function (k) {
+    var s = state[k.id] || {};
+    state[k.id] = { start: s.start || null, stop: s.stop || null, log: s.log || [], left: s.left };
+  });
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function fmtDate(d) { return pad(d.getDate()) + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getFullYear() % 100); }
+  function fmtTime(d) {
+    var h = d.getHours(), ap = h >= 12 ? "PM" : "AM";
+    h = h % 12; if (h === 0) h = 12;
+    return pad(h) + ":" + pad(d.getMinutes()) + " " + ap;
+  }
+  function fmtClock(ms) {
+    var s = Math.max(0, Math.floor(ms / 1000));
+    return pad(Math.floor(s / 3600)) + ":" + pad(Math.floor((s % 3600) / 60)) + ":" + pad(s % 60);
+  }
+  function fmtUsed(ms) {
+    var m = Math.round(ms / 60000);
+    if (m < 1) return "less than 1 minute";
+    var h = Math.floor(m / 60), r = m % 60, out = [];
+    if (h) out.push(h + (h === 1 ? " hour" : " hours"));
+    if (r) out.push(r + (r === 1 ? " minute" : " minutes"));
+    return out.join(" ");
+  }
+  function midnight() { var d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
+
+  // Time used since midnight today, counting finished sessions and a running one.
+  function usedToday(k) {
+    var st = state[k.id], from = midnight(), now = Date.now(), total = 0;
+    st.log.forEach(function (s) { total += Math.max(0, Math.min(s.stop, now) - Math.max(s.start, from)); });
+    if (st.start && !st.stop) total += Math.max(0, now - Math.max(st.start, from));
+    return total;
+  }
+
+  function message(kid, st) {
+    var s = new Date(st.start);
+    var lines = [kid.name + " " + fmtDate(s), "Start Time " + fmtTime(s)];
+    if (st.stop) {
+      lines.push("Stop Time " + fmtTime(new Date(st.stop)));
+      lines.push("Used " + fmtUsed(st.stop - st.start));
+      if (st.total != null) {
+        lines.push("Today total " + fmtUsed(st.total) + " of " + fmtUsed(limitMin * 60000));
+        var left = limitMin * 60000 - st.total;
+        lines.push(left > 0 ? "Left today " + fmtUsed(left) : left === 0 ? "Daily limit finished" : "Over the limit by " + fmtUsed(-left));
+      }
+    }
+    return lines.join("\n");
+  }
+
+  var cardsEl = document.getElementById("cards");
+  var els = {};
+
+  KIDS.forEach(function (k) {
+    var c = document.createElement("section");
+    c.className = "card " + k.id + " idle";
+    c.innerHTML =
+      '<div class="head"><h2>' + k.name + '</h2><span class="pill"></span></div>' +
+      '<div class="clock">00:00:00</div>' +
+      '<div class="alert">Time is up. Give the phone back and press Stop.</div>' +
+      '<div class="meter"><div class="meter-row"><span class="used"></span><span class="left"></span></div>' +
+      '<div class="bar"><div class="fill"></div></div></div>' +
+      '<button type="button" class="main">Start</button>' +
+      '<div class="msg" hidden>' +
+      '<label for="t-' + k.id + '">Message to send</label>' +
+      '<textarea id="t-' + k.id + '" readonly rows="4"></textarea>' +
+      '<div class="actions"><button type="button" class="copy">Copy</button>' +
+      '<a class="wa" target="_blank" rel="noopener">WhatsApp</a></div></div>';
+    cardsEl.appendChild(c);
+    els[k.id] = {
+      card: c, pill: c.querySelector(".pill"), clock: c.querySelector(".clock"),
+      used: c.querySelector(".used"), left: c.querySelector(".left"), fill: c.querySelector(".fill"),
+      main: c.querySelector(".main"), msg: c.querySelector(".msg"),
+      ta: c.querySelector("textarea"), copy: c.querySelector(".copy"), wa: c.querySelector(".wa")
+    };
+
+    els[k.id].main.addEventListener("click", function () {
+      var st = state[k.id];
+      if (st.start && !st.stop) {
+        st.stop = Date.now();
+        st.log.push({ start: st.start, stop: st.stop });
+        var keepFrom = midnight() - 2 * 86400000;
+        st.log = st.log.filter(function (s) { return s.stop >= keepFrom; });
+        st.total = usedToday(k);
+      } else {
+        st.start = Date.now(); st.stop = null; st.total = null;
+      }
+      save(); render(); window.scrollTo({ top: c.offsetTop - 12, behavior: "smooth" });
+    });
+
+    els[k.id].copy.addEventListener("click", function () {
+      var e = els[k.id], text = e.ta.value;
+      function done(ok) {
+        if (!ok) { e.ta.focus(); e.ta.select(); }
+        e.copy.textContent = ok ? "Copied" : "Press and hold to copy";
+        setTimeout(function () { e.copy.textContent = "Copy"; }, 2000);
+      }
+      try {
+        navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+      } catch (err) { done(false); }
+    });
+  });
+
+  var numEl = document.getElementById("num");
+  numEl.value = number;
+  numEl.addEventListener("input", function () {
+    number = numEl.value.replace(/\D/g, "");
+    try { localStorage.setItem(NUMKEY, number); } catch (e) {}
+    render();
+  });
+  var sesEl = document.getElementById("session");
+  sesEl.value = String(sessionMin);
+  sesEl.addEventListener("input", function () {
+    var v = parseInt(sesEl.value, 10);
+    if (v > 0) {
+      sessionMin = v;
+      try { localStorage.setItem(SESKEY, String(v)); } catch (e) {}
+      render();
+    }
+  });
+  var limEl = document.getElementById("limit");
+  limEl.value = String(limitMin);
+  limEl.addEventListener("input", function () {
+    var v = parseInt(limEl.value, 10);
+    if (v > 0) {
+      limitMin = v;
+      try { localStorage.setItem(LIMKEY, String(v)); } catch (e) {}
+      render();
+    }
+  });
+
+  function render() {
+    KIDS.forEach(function (k) {
+      var st = state[k.id], e = els[k.id];
+      var running = st.start && !st.stop, done = st.start && st.stop;
+      e.main.textContent = running ? "Stop" : done ? "Start again" : "Start";
+      e.msg.hidden = !st.start;
+      if (st.start) {
+        var text = message(k, st);
+        e.ta.value = text;
+        e.ta.rows = text.split("\n").length;
+        e.wa.href = "https://wa.me/" + (number ? number : "") + "?text=" + encodeURIComponent(text);
+      }
+      tickOne(k);
+    });
+  }
+  function tickOne(k) {
+    var st = state[k.id], e = els[k.id];
+    var running = st.start && !st.stop, done = st.start && st.stop;
+    var used = usedToday(k), limit = limitMin * 60000, left = limit - used;
+    var over = left <= 0;
+    var due = running && (Date.now() - st.start) >= sessionMin * 60000;
+    e.card.className = "card " + k.id + (running ? " running" : done ? " done" : " idle") + (over ? " over" : "") + (due ? " due" : "");
+    e.pill.textContent = due ? "Give back now" : over ? "Limit reached" : running ? "Using phone" : done ? "Finished" : "Not started";
+    if (running) e.clock.textContent = fmtClock(Date.now() - st.start);
+    else if (done) e.clock.textContent = fmtClock(st.stop - st.start);
+    else e.clock.textContent = "00:00:00";
+    e.used.textContent = "Today " + (used < 60000 ? "0 minutes" : fmtUsed(used));
+    e.left.textContent = over ? "Over by " + (left === 0 ? "0 minutes" : fmtUsed(-left)) : "Left " + fmtUsed(left);
+    e.fill.style.width = Math.min(100, (used / limit) * 100) + "%";
+  }
+  function tick() {
+    KIDS.forEach(tickOne);
+    var d = new Date();
+    document.getElementById("today").textContent = fmtDate(d) + " · " + fmtTime(d);
+  }
+
+  render(); tick();
+  setInterval(tick, 1000);
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }
+</script>
+</body>
+</html>
