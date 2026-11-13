@@ -93,7 +93,7 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 @media (max-width: 360px) { .actions { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: no-preference) { .main { transition: transform 0.08s; } .main:active { transform: scale(0.98); } .fill { transition: width 0.4s; } }
 </style>
-<style>body{margin:0}</style>
+<style>body{margin:0}[hidden]{display:none!important}#panel{display:grid;gap:14px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}</style>
 </head>
 <body>
 <main>
@@ -103,8 +103,15 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   </div>
   <div id="cards" style="display:grid;gap:16px"></div>
   <details>
-    <summary>Settings</summary>
+    <summary>Parent settings</summary>
     <div class="settings">
+      <div class="setting" id="lock">
+        <label for="pin" id="pinLabel">Enter parent PIN</label>
+        <input id="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off">
+        <button type="button" id="pinBtn" class="copy">Unlock</button>
+        <small id="pinMsg"></small>
+      </div>
+      <div id="panel" hidden>
       <div class="setting">
         <label for="session">Time allowed in one go, in minutes</label>
         <input id="session" inputmode="numeric" placeholder="60" autocomplete="off">
@@ -119,6 +126,22 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
         <label for="num">WhatsApp number with country code, digits only</label>
         <input id="num" inputmode="numeric" placeholder="923001234567" autocomplete="off">
         <small>Leave empty and WhatsApp will ask who to send it to.</small>
+      </div>
+      <div class="setting">
+        <label>Reset a child's day</label>
+        <div class="row2">
+          <button type="button" class="wa" id="reset-javeria">Reset Javeria</button>
+          <button type="button" class="wa" id="reset-bilal">Reset Bilal</button>
+        </div>
+        <small>Clears today's time and stops a running timer. Tap twice to confirm. A timer left running is also stopped automatically at 12:00 AM.</small>
+      </div>
+      <div class="setting">
+        <label for="newpin">Change parent PIN</label>
+        <input id="newpin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="New PIN, 4 to 8 digits">
+        <button type="button" id="newpinBtn" class="wa">Save new PIN</button>
+        <small id="newpinMsg"></small>
+      </div>
+      <button type="button" id="lockBtn" class="copy">Lock settings</button>
       </div>
     </div>
   </details>
@@ -142,7 +165,7 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   try { var sm = parseInt(localStorage.getItem(SESKEY), 10); if (sm > 0) sessionMin = sm; } catch (e) {}
   KIDS.forEach(function (k) {
     var s = state[k.id] || {};
-    state[k.id] = { start: s.start || null, stop: s.stop || null, log: s.log || [], left: s.left };
+    state[k.id] = { start: s.start || null, stop: s.stop || null, log: s.log || [], total: s.total != null ? s.total : null, auto: !!s.auto };
   });
 
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -166,6 +189,28 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
     return out.join(" ");
   }
   function midnight() { var d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function dayStart(ts) { var d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function nextMidnight(ts) { var d = new Date(ts); d.setHours(24, 0, 0, 0); return d.getTime(); }
+
+  // A timer still running at 12:00 AM is stopped at exactly 12:00 AM, even if the app was closed meanwhile.
+  function rollover() {
+    var changed = false;
+    KIDS.forEach(function (k) {
+      var st = state[k.id];
+      if (!(st.start && !st.stop)) return;
+      var cut = nextMidnight(st.start);
+      if (Date.now() < cut) return;
+      st.stop = cut; st.auto = true;
+      st.log.push({ start: st.start, stop: cut });
+      var keepFrom = midnight() - 2 * 86400000;
+      st.log = st.log.filter(function (s) { return s.stop >= keepFrom; });
+      var from = dayStart(st.start), total = 0;
+      st.log.forEach(function (s) { total += Math.max(0, Math.min(s.stop, cut) - Math.max(s.start, from)); });
+      st.total = total;
+      changed = true;
+    });
+    if (changed) { save(); render(); }
+  }
 
   // Time used since midnight today, counting finished sessions and a running one.
   function usedToday(k) {
@@ -181,6 +226,7 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
     if (st.stop) {
       lines.push("Stop Time " + fmtTime(new Date(st.stop)));
       lines.push("Used " + fmtUsed(st.stop - st.start));
+      if (st.auto) lines.push("Stopped automatically at midnight");
       if (st.total != null) {
         lines.push("Today total " + fmtUsed(st.total) + " of " + fmtUsed(limitMin * 60000));
         var left = limitMin * 60000 - st.total;
@@ -225,7 +271,7 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
         st.log = st.log.filter(function (s) { return s.stop >= keepFrom; });
         st.total = usedToday(k);
       } else {
-        st.start = Date.now(); st.stop = null; st.total = null;
+        st.start = Date.now(); st.stop = null; st.total = null; st.auto = false;
       }
       save(); render(); window.scrollTo({ top: c.offsetTop - 12, behavior: "smooth" });
     });
@@ -271,6 +317,64 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
     }
   });
 
+  // Parent settings: locked with a PIN. Unlocked state lives only in memory and resets when the panel closes.
+  var PINKEY = "screentime-log-pin";
+  var pinHash = "";
+  try { pinHash = localStorage.getItem(PINKEY) || ""; } catch (e) { pinHash = ""; }
+  var unlocked = false;
+  function $(id) { return document.getElementById(id); }
+  function hashPin(p) { var s = "st:" + p, h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return String(h); }
+  function digits(v) { return (v || "").replace(/\D/g, ""); }
+  function showLock() {
+    $("lock").hidden = unlocked;
+    $("panel").hidden = !unlocked;
+    $("pinLabel").textContent = pinHash ? "Enter parent PIN" : "Set a parent PIN (4 to 8 digits) to protect these settings";
+    $("pinBtn").textContent = pinHash ? "Unlock" : "Save PIN";
+  }
+  $("pinBtn").addEventListener("click", function () {
+    var v = digits($("pin").value), msg = $("pinMsg");
+    msg.textContent = "";
+    if (!pinHash) {
+      if (v.length < 4) { msg.textContent = "Use at least 4 digits."; return; }
+      pinHash = hashPin(v);
+      try { localStorage.setItem(PINKEY, pinHash); } catch (e) {}
+      unlocked = true;
+    } else if (hashPin(v) === pinHash) {
+      unlocked = true;
+    } else {
+      msg.textContent = "Wrong PIN."; $("pin").value = ""; return;
+    }
+    $("pin").value = ""; showLock();
+  });
+  $("pin").addEventListener("keydown", function (e) { if (e.key === "Enter") $("pinBtn").click(); });
+  $("newpinBtn").addEventListener("click", function () {
+    var v = digits($("newpin").value), msg = $("newpinMsg");
+    if (v.length < 4) { msg.textContent = "Use at least 4 digits."; return; }
+    pinHash = hashPin(v);
+    try { localStorage.setItem(PINKEY, pinHash); } catch (e) {}
+    $("newpin").value = ""; msg.textContent = "PIN changed.";
+  });
+  $("lockBtn").addEventListener("click", function () { unlocked = false; showLock(); });
+  document.querySelector("details").addEventListener("toggle", function () {
+    if (!this.open) { unlocked = false; showLock(); }
+  });
+  KIDS.forEach(function (k) {
+    var b = $("reset-" + k.id), armed = false, timer;
+    b.addEventListener("click", function () {
+      if (!armed) {
+        armed = true; b.textContent = "Tap again to confirm";
+        timer = setTimeout(function () { armed = false; b.textContent = "Reset " + k.name; }, 4000);
+        return;
+      }
+      clearTimeout(timer); armed = false; b.textContent = "Reset " + k.name;
+      var st = state[k.id], m = midnight();
+      st.log = st.log.filter(function (s) { return s.stop <= m; });
+      st.start = null; st.stop = null; st.total = null; st.auto = false;
+      save(); render();
+    });
+  });
+  showLock();
+
   function render() {
     KIDS.forEach(function (k) {
       var st = state[k.id], e = els[k.id];
@@ -302,6 +406,7 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
     e.fill.style.width = Math.min(100, (used / limit) * 100) + "%";
   }
   function tick() {
+    rollover();
     KIDS.forEach(tickOne);
     var d = new Date();
     document.getElementById("today").textContent = fmtDate(d) + " · " + fmtTime(d);
@@ -309,6 +414,7 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 
   render(); tick();
   setInterval(tick, 1000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) tick(); });
 })();
 </script>
 <script>
